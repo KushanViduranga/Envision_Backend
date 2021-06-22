@@ -18,7 +18,6 @@ E:\Project\Rusada\Envision_Backend\Envision.WebApi\obj\Debug\netcoreapp3.1\Envis
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\obj\Debug\netcoreapp3.1\Envision.WebApi.dll
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\obj\Debug\netcoreapp3.1\Envision.WebApi.pdb
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\obj\Debug\netcoreapp3.1\Envision.WebApi.genruntimeconfig.cache
-E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\Dapper.dll
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\Microsoft.OpenApi.dll
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\Swashbuckle.AspNetCore.Swagger.dll
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\Swashbuckle.AspNetCore.SwaggerGen.dll
