@@ -1,12 +1,12 @@
-﻿using Dapper;
+﻿using Envision.DAL;
 using Envision.DAL.Models;
-using Envision.WebApi.Common;
 using Envision.WebApi.Models;
 using Envision.WebApi.Services;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Data.SqlClient;
+using System.Drawing;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -14,190 +14,273 @@ namespace Envision.WebApi.Repositories
 {
     public class AircraftLogRepository : IAircraftLogService
     {
-        private const string SP_SELECT_AIRCRAFTLOGS = "[dbo].[Select_AircraftLogs]";
-        private const string SP_SELECT_AIRCRAFTLOG_BYID = "[dbo].[Select_AircraftLogById]";
-        private const string SP_INSERT_AIRCRAFTLOG = "[dbo].[Insert_AircraftLog]";
-        private const string SP_UPDATE_AIRCRAFTLOG = "[dbo].[Update_AircraftLog]";
-        private const string SP_DELETE_AIRCRAFTLOG = "[dbo].[Delete_AircraftLog]";
+        protected DatabaseContext _context;
 
+        public AircraftLogRepository(DatabaseContext context)
+        {
+            _context = context;
+        }
 
         public List<AircraftLog> GetAircraftLogs()
         {
-            using (IDbConnection con = new SqlConnection(Global.ConnectionString))
-            {
-                var result = (con.Query<AircraftLog>(SP_SELECT_AIRCRAFTLOGS,
-                                commandType: CommandType.StoredProcedure))?.ToList();
-                return result;
-            }
+            List<AircraftLog> aircraftLogList = new List<AircraftLog>();         
+
+            aircraftLogList = (from a in _context.AircraftLogs
+                               where a.IsActive == true
+                               select a).ToList();
+
+            return aircraftLogList;
         }
 
         public List<AircraftLog> FilterAircraftLogs(string make, string model, string registration)
         {
-            //Not Complete
-            using (IDbConnection con = new SqlConnection(Global.ConnectionString))
-            {
-                var result = (con.Query<AircraftLog>(SP_SELECT_AIRCRAFTLOGS,
-                                commandType: CommandType.StoredProcedure))?.ToList();
-                return result;
-            }
+            List<AircraftLog> aircraftLogList = new List<AircraftLog>();
+
+            //aircraftLogList = (from a in _context.AircraftLogs
+            //                   where a.IsActive == true &&
+            //                   a.Make.Contains(make) ||
+            //                   a.Model.Contains(model) ||
+            //                   a.Registration.Contains(registration)
+            //                   select a).ToList();
+
+            aircraftLogList = (from a in _context.AircraftLogs
+                               where a.IsActive == true
+                               select a).ToList();
+
+            if (make != null)
+                aircraftLogList = aircraftLogList.Where(x => x.Make.Contains(make)).ToList();
+
+            if (model != null)
+                aircraftLogList = aircraftLogList.Where(x => x.Model.Contains(model)).ToList();
+
+            if (registration != null)
+                aircraftLogList = aircraftLogList.Where(x => x.Registration.Contains(registration)).ToList();
+
+            return aircraftLogList;
         }
 
         public AircraftLog GetAircraftLogById(int id)
         {
-            using (IDbConnection con = new SqlConnection(Global.ConnectionString))
-            {
-                var result = (con.Query<AircraftLog>(SP_SELECT_AIRCRAFTLOG_BYID,
-                                param: new { Id = id },
-                                commandType: CommandType.StoredProcedure)).FirstOrDefault();
-                return result;
-            }
+            AircraftLog aircraftLog = new AircraftLog();
+
+            aircraftLog = (from a in _context.AircraftLogs
+                           join i in _context.AircraftLogImages on a.Id equals i.AircraftLogId
+                           where a.Id == id && i.IsActive == true
+                           select new AircraftLog
+                           {
+                               Id = a.Id,
+                               Make = a.Make,
+                               Model = a.Model,
+                               Registration = a.Registration,
+                               Location = a.Location,
+                               DateTime = a.DateTime,
+                               IsActive = a.IsActive,
+                               CreateBy = a.CreateBy,
+                               CreateDate = a.CreateDate,
+                               ModifiedBy = a.ModifiedBy,
+                               ModifiedDate = a.ModifiedDate,
+                               ImageName = i.ImageName.ToString(),
+                               ImageExtension = i.ImageExtension
+                           }).FirstOrDefault();
+
+            aircraftLog.Base64image = ReadAircraftImage(aircraftLog.ImageName);
+
+            return aircraftLog;
         }
 
         public string InsertAircraftLog(AircraftLogVM aircraftLog)
         {
-            using (var con = new SqlConnection(Global.ConnectionString))
+            using (var transaction = _context.Database.BeginTransaction())
             {
-                if (con.State == ConnectionState.Closed) con.Open();
-
-                using (SqlTransaction tran = con.BeginTransaction())
+                try
                 {
-                    try
-                    {
-                        var parameters = PrepareAircraftLogInsertParameter(aircraftLog);
-                        con.Execute(SP_INSERT_AIRCRAFTLOG,
-                        param: parameters,
-                        transaction: tran,
-                        commandType: CommandType.StoredProcedure);
+                    AircraftLog saveAircraftModel = PrepareAircraftLogInsertParameter(aircraftLog);
+                    _context.AircraftLogs.Add(saveAircraftModel);
+                    _context.SaveChanges();
 
-                        string result = parameters.Get<string>("@OutMsg");
-                        if (result == "Successful")
-                        {
-                            tran.Commit();
-                        }
-                        else
-                        {
-                            tran.Rollback();
-                        }
-                        return result;
-                    }
-                    catch (Exception ex)
-                    {
-                        tran.Rollback();
-                        return ex.Message;
-                    }
+                    Guid newFileName = Guid.NewGuid();
+                    AircraftLogImage saveAircraftImageModel = PrepareAircraftLogImageInsertParameter(saveAircraftModel.Id, aircraftLog.base64image, newFileName, aircraftLog.CreateBy);
+                    _context.AircraftLogImages.Add(saveAircraftImageModel);
+                    _context.SaveChanges();
+
+                    UploadAircraftImage(aircraftLog.base64image, newFileName);
+
+                    transaction.Commit();
+
+                    return "Successful";
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    return ex.Message;
                 }
             }
         }
 
         public string UpdateAircraftLog(AircraftLogVM aircraftLog)
         {
-            using (var con = new SqlConnection(Global.ConnectionString))
+            using (var transaction = _context.Database.BeginTransaction())
             {
-                if (con.State == ConnectionState.Closed) con.Open();
-
-                using (SqlTransaction tran = con.BeginTransaction())
+                try
                 {
-                    try
-                    {
-                        var parameters = PrepareAircraftLogUpdateParameter(aircraftLog);
-                        con.Execute(SP_UPDATE_AIRCRAFTLOG,
-                        param: parameters,
-                        transaction: tran,
-                        commandType: CommandType.StoredProcedure);
+                    AircraftLog updateData = PrepareAircraftLogUpdateParameter(aircraftLog);
+                    _context.AircraftLogs.Update(updateData);
 
-                        string result = parameters.Get<string>("@OutMsg");
-                        if (result == "Successful")
-                        {
-                            tran.Commit();
-                        }
-                        else
-                        {
-                            tran.Rollback();
-                        }
-                        return result;
-                    }
-                    catch (Exception ex)
+                    if(aircraftLog.base64image != "")
                     {
-                        tran.Rollback();
-                        return ex.Message;
+                        AircraftLogImage updateAircraftImageModel = PrepareAircraftLogImageUpdateParameter(aircraftLog.Id);
+                        _context.AircraftLogImages.Update(updateAircraftImageModel);
+
+                        Guid newFileName = Guid.NewGuid();
+                        AircraftLogImage saveAircraftImageModel = PrepareAircraftLogImageInsertParameter(aircraftLog.Id, aircraftLog.base64image, newFileName, aircraftLog.ModifiedBy);
+                        _context.AircraftLogImages.Add(saveAircraftImageModel);
+
+                        _context.SaveChanges();
+
+                        UploadAircraftImage(aircraftLog.base64image, newFileName);
                     }
+
+                    _context.SaveChanges();
+                    transaction.Commit();
+
+                    return "Successful";
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    return ex.Message;
                 }
             }
         }
 
         public string DeleteAircraftLog(int id)
         {
-            using (var con = new SqlConnection(Global.ConnectionString))
+            using (var transaction = _context.Database.BeginTransaction())
             {
-                if (con.State == ConnectionState.Closed) con.Open();
-
-                using (SqlTransaction tran = con.BeginTransaction())
+                try
                 {
-                    try
-                    {
-                        var parameters = PrepareAircraftLogDeleteParameter(id);
-                        con.Execute(SP_DELETE_AIRCRAFTLOG,
-                        param: parameters,
-                        transaction: tran,
-                        commandType: CommandType.StoredProcedure);
+                    AircraftLog deleteData = PrepareAircraftLogDeleteParameter(id);
 
-                        string result = parameters.Get<string>("@OutMsg");
-                        if (result == "Successful")
-                        {
-                            tran.Commit();
-                        }
-                        else
-                        {
-                            tran.Rollback();
-                        }
-                        return result;
-                    }
-                    catch (Exception ex)
-                    {
-                        tran.Rollback();
-                        return ex.Message;
-                    }
+                    _context.AircraftLogs.Update(deleteData);
+                    _context.SaveChanges();
+                    transaction.Commit();
+
+                    return "Successful";
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    return ex.Message;
                 }
             }
         }
 
 
         #region Private
-        private DynamicParameters PrepareAircraftLogInsertParameter(AircraftLogVM aircraftLog)
+        private AircraftLog PrepareAircraftLogInsertParameter(AircraftLogVM aircraftLog)
         {
-            var parameters = new DynamicParameters();
-            parameters.Add("@Make", aircraftLog.Make);
-            parameters.Add("@Model", aircraftLog.Model);
-            parameters.Add("@Registration", aircraftLog.Registration);
-            parameters.Add("@Location", aircraftLog.Location);
-            parameters.Add("@DateTime", Convert.ToDateTime(aircraftLog.DateTime));
-            parameters.Add("@CreateBy", aircraftLog.CreateBy);
-            parameters.Add("@OutMsg", "", DbType.String, ParameterDirection.Output);
-            return parameters;
+            AircraftLog model = new AircraftLog();
+            model.Make = aircraftLog.Make;
+            model.Model = aircraftLog.Model;
+            model.Registration = aircraftLog.Registration;
+            model.Location = aircraftLog.Location;
+            model.DateTime = Convert.ToDateTime(aircraftLog.SeenDateTime);
+            model.IsActive = true;
+            model.CreateBy = aircraftLog.CreateBy;
+            model.CreateDate = DateTime.Now;
+            return model;
         }
 
-        private DynamicParameters PrepareAircraftLogUpdateParameter(AircraftLogVM aircraftLog)
+        private AircraftLogImage PrepareAircraftLogImageInsertParameter(int aircraftLogId, string base64image, Guid newFileName, int createBy)
         {
-            var parameters = new DynamicParameters();
-            parameters.Add("@Id", aircraftLog.Id);
-            parameters.Add("@Make", aircraftLog.Make);
-            parameters.Add("@Model", aircraftLog.Model);
-            parameters.Add("@Registration", aircraftLog.Registration);
-            parameters.Add("@Location", aircraftLog.Location);
-            parameters.Add("@DateTime", Convert.ToDateTime(aircraftLog.DateTime));
-            parameters.Add("@ModifiedBy", aircraftLog.ModifiedBy);
-            parameters.Add("@OutMsg", "", DbType.String, ParameterDirection.Output);
-            return parameters;
+            string[] base64Code = base64image.Split(",");
+            string extensionString = base64Code[0].Split("/").Last();
+            string extension = extensionString.Split(";").First();
+
+            AircraftLogImage model = new AircraftLogImage();
+            model.AircraftLogId = aircraftLogId;
+            model.ImageName = newFileName;
+            model.ImageExtension = extension;
+            model.IsActive = true;
+            model.UploadBy = createBy;
+            model.UploadDate = DateTime.Now;
+            return model;
+        }
+        
+
+        private AircraftLog PrepareAircraftLogUpdateParameter(AircraftLogVM aircraftLog)
+        {
+            AircraftLog model = _context.AircraftLogs.Find(aircraftLog.Id);
+            if (model != null)
+            {
+                model.Make = aircraftLog.Make;
+                model.Model = aircraftLog.Model;
+                model.Registration = aircraftLog.Registration;
+                model.Location = aircraftLog.Location;
+                model.DateTime = Convert.ToDateTime(aircraftLog.SeenDateTime);
+                model.ModifiedBy = aircraftLog.ModifiedBy;
+                model.ModifiedDate = DateTime.Now;
+            }
+            return model;
         }
 
-        private DynamicParameters PrepareAircraftLogDeleteParameter(int id)
+        private AircraftLogImage PrepareAircraftLogImageUpdateParameter(int aircraftLogId)
         {
-            var parameters = new DynamicParameters();
-            parameters.Add("@Id", id);
-            parameters.Add("@OutMsg", "", DbType.String, ParameterDirection.Output);
-            return parameters;
+            AircraftLogImage model = (from i in _context.AircraftLogImages
+                                      where i.AircraftLogId == aircraftLogId && i.IsActive == true
+                                      select i).FirstOrDefault();
+            if (model != null)
+            {
+                model.IsActive = false;
+            }
+            return model;
+
+        }
+
+
+        private AircraftLog PrepareAircraftLogDeleteParameter(int id)
+        {
+            AircraftLog model = _context.AircraftLogs.Find(id);
+            if(model != null)
+            {
+                model.IsActive = false;
+            }
+            return model;
+        }
+
+
+        private bool UploadAircraftImage(string base64image, Guid newFileName)
+        {
+            var folderName = Path.Combine("Resources", "UploadImages");
+            var pathToSave = Path.Combine(Directory.GetCurrentDirectory(), folderName);
+
+            string renamedFile = Convert.ToString(newFileName) + "." + "";
+            var fullPath = Path.Combine(pathToSave, renamedFile);
+            //var dbPath = Path.Combine(folderName, renamedFile);
+
+            string[] base64Code = base64image.Split(",");
+            byte[] bytes = Convert.FromBase64String(base64Code[1]);
+
+            using (MemoryStream ms = new MemoryStream(bytes))
+            {
+                Image pic = Image.FromStream(ms);
+                pic.Save(fullPath);
+            }
+
+            return true;
+        }
+
+        private string ReadAircraftImage(string fileName)
+        {
+            var folderName = Path.Combine("Resources", "UploadImages");
+            var pathToRead = Path.Combine(Directory.GetCurrentDirectory(), folderName);
+            var fullPath = Path.Combine(pathToRead, fileName);
+
+            Byte[] bytes = File.ReadAllBytes(fullPath);
+            String file = Convert.ToBase64String(bytes);
+
+            return file;
         }
         #endregion
-
     }
 }

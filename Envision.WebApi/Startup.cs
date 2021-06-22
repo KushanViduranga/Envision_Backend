@@ -45,7 +45,7 @@ namespace Envision.WebApi
                 options.UseSqlServer(Configuration.GetConnectionString("EnvisionDB"));
             });
 
-            services.AddScoped<IAircraftLogService, AircraftLogRepositoryEF>();
+            services.AddScoped<IAircraftLogService, AircraftLogRepository>();
 
             services.AddControllers();
             services.AddSwaggerGen();

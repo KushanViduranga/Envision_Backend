@@ -44,7 +44,6 @@ namespace Envision.WebApi.Controllers
             return response;
         }
 
-        //[HttpGet("filter-aircraft-logs/{make}/{model}/{registration}")]
         [HttpGet("filter-aircraft-logs")]
         public Response<List<AircraftLog>> FilterAircraftLogs(string make, string model, string registration)
         {
