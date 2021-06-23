@@ -34,12 +34,7 @@ namespace Envision.WebApi
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddSingleton<IConfiguration>(Configuration);
-            
-            //Dapper
-            //Global.ConnectionString = Configuration.GetConnectionString("EnvisionDB");
-
-            //EF
+            services.AddSingleton<IConfiguration>(Configuration);            
             services.AddDbContext<DatabaseContext>(options =>
             {
                 options.UseSqlServer(Configuration.GetConnectionString("EnvisionDB"));
@@ -64,6 +59,8 @@ namespace Envision.WebApi
                 x.MultipartBodyLengthLimit = int.MaxValue;
                 x.MemoryBufferThreshold = int.MaxValue;
             });
+
+            OnConfiguring();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -98,5 +95,15 @@ namespace Envision.WebApi
                 endpoints.MapControllers();
             });
         }
+
+        protected void OnConfiguring()
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<DatabaseContext>();
+            if (!optionsBuilder.IsConfigured)
+            {
+                optionsBuilder.UseSqlServer(Configuration.GetConnectionString("EnvisionDB"));
+            }
+        }
+
     }
 }

@@ -77,3 +77,5 @@ E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\Syste
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\runtimes\win\lib\netcoreapp3.0\Microsoft.Win32.SystemEvents.dll
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\runtimes\unix\lib\netcoreapp3.0\System.Drawing.Common.dll
 E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\runtimes\win\lib\netcoreapp3.0\System.Drawing.Common.dll
+E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\Humanizer.dll
+E:\Project\Rusada\Envision_Backend\Envision.WebApi\bin\Debug\netcoreapp3.1\Microsoft.EntityFrameworkCore.Design.dll
